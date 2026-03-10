@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build release
+        run: |
+          chmod +x scripts/build-release.sh
+          ./scripts/build-release.sh ${{ steps.version.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AppMixer v${{ steps.version.outputs.version }}
+          body: |
+            ## AppMixer v${{ steps.version.outputs.version }}
+
+            Per-app volume mixer for macOS.
+
+            ### Install
+            1. Download `AppMixer-${{ steps.version.outputs.version }}.dmg`
+            2. Open the DMG and drag AppMixer to Applications
+            3. Launch AppMixer - grant screen capture permission when prompted
+            4. Click the slider icon in your menu bar
+
+            Requires macOS 14.2 (Sonoma) or later.
+          files: |
+            dist/AppMixer-${{ steps.version.outputs.version }}.dmg
+          draft: false
+          prerelease: false
