@@ -20,22 +20,23 @@ macOS doesn't let you control volume per app. AppMixer fixes that by tapping int
 
 ## Install
 
+### Homebrew
+
+```bash
+brew install --cask bbioren/tap/appmixer
+```
+
+### Download
+
+Grab the latest `.dmg` from [GitHub Releases](https://github.com/bbioren/AppMixer/releases), open it, and drag AppMixer to Applications.
+
+### Build from source
+
 ```bash
 git clone https://github.com/bbioren/AppMixer.git
 cd AppMixer
-swift build -c release
-```
-
-The binary will be at `.build/release/AppMixer`. You can copy it wherever you like:
-
-```bash
-cp .build/release/AppMixer /usr/local/bin/
-```
-
-Or just run directly:
-
-```bash
-swift run
+./scripts/build-release.sh
+open dist/AppMixer.app
 ```
 
 ## Usage
