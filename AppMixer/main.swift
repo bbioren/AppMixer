@@ -184,6 +184,7 @@ class AppAudioTap {
         tapDesc.uuid = tapUUID
         tapDesc.muteBehavior = .mutedWhenTapped
         tapDesc.name = "AppMixer-\(process.name)"
+        tapDesc.isPrivate = true
 
         var newTapID: AudioObjectID = 0
         let tapStatus = AudioHardwareCreateProcessTap(tapDesc, &newTapID)
@@ -198,6 +199,7 @@ class AppAudioTap {
             kAudioAggregateDeviceUIDKey as String: "AppMixer-\(tapUUID.uuidString)",
             kAudioAggregateDeviceMainSubDeviceKey as String: outputDeviceUID,
             kAudioAggregateDeviceIsPrivateKey as String: true,
+            kAudioAggregateDeviceIsStackedKey as String: false,
             kAudioAggregateDeviceSubDeviceListKey as String: [
                 [kAudioSubDeviceUIDKey as String: outputDeviceUID]
             ],
@@ -206,7 +208,8 @@ class AppAudioTap {
                     kAudioSubTapUIDKey as String: tapUUID.uuidString,
                     kAudioSubTapDriftCompensationKey as String: true
                 ]
-            ]
+            ],
+            kAudioAggregateDeviceTapAutoStartKey as String: true
         ]
 
         var newAggID: AudioObjectID = 0
@@ -227,13 +230,46 @@ class AppAudioTap {
             let input = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inInputData))
             let output = UnsafeMutableAudioBufferListPointer(outOutputData)
 
-            for i in 0..<min(input.count, output.count) {
-                guard let inData = input[i].mData, let outData = output[i].mData else { continue }
-                let sampleCount = Int(input[i].mDataByteSize) / MemoryLayout<Float>.size
-                let inSamples = inData.assumingMemoryBound(to: Float.self)
+            for i in 0..<output.count {
+                guard let outData = output[i].mData else { continue }
                 let outSamples = outData.assumingMemoryBound(to: Float.self)
-                for j in 0..<sampleCount {
-                    outSamples[j] = inSamples[j] * currentGain
+                let outSampleCount = Int(output[i].mDataByteSize) / MemoryLayout<Float>.size
+
+                if i < input.count, let inData = input[i].mData {
+                    let inSamples = inData.assumingMemoryBound(to: Float.self)
+                    let inSampleCount = Int(input[i].mDataByteSize) / MemoryLayout<Float>.size
+                    let count = min(inSampleCount, outSampleCount)
+                    for j in 0..<count {
+                        outSamples[j] = inSamples[j] * currentGain
+                    }
+                    for j in count..<outSampleCount {
+                        outSamples[j] = 0
+                    }
+                } else if input.count > 0, let inData = input[0].mData {
+                    let inSamples = inData.assumingMemoryBound(to: Float.self)
+                    let inSampleCount = Int(input[0].mDataByteSize) / MemoryLayout<Float>.size
+                    let inChannels = Int(input[0].mNumberChannels)
+                    let outChannelsPerBuf = Int(output[i].mNumberChannels)
+
+                    if inChannels >= 2 && outChannelsPerBuf == 1 {
+                        let frames = min(inSampleCount / inChannels, outSampleCount)
+                        let ch = i % inChannels
+                        for j in 0..<frames {
+                            outSamples[j] = inSamples[j * inChannels + ch] * currentGain
+                        }
+                    } else {
+                        let count = min(inSampleCount, outSampleCount)
+                        for j in 0..<count {
+                            outSamples[j] = inSamples[j] * currentGain
+                        }
+                    }
+                    for j in min(inSampleCount, outSampleCount)..<outSampleCount {
+                        outSamples[j] = 0
+                    }
+                } else {
+                    for j in 0..<outSampleCount {
+                        outSamples[j] = 0
+                    }
                 }
             }
         }
